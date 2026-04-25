@@ -6,6 +6,7 @@ const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const Database = require('better-sqlite3');
 const { createX402Middleware } = require("./x402-middleware");
+const { createMCPServer, syncDropsToKeeperHub, cleanupExpiredWorkflows } = require("./keeperhub");
 
 const app = express();
 const corsOptions = {
@@ -145,7 +146,7 @@ function cleanupExpiredDrops() {
 }
 
 function validateCreateDropBody(body) {
-  const { payload, teaser, severity, price, tag, sellerWallet, ttl } = body || {};
+  const { payload, teaser, severity, price, tag, sellerWallet, treasuryWallet, ttl } = body || {};
 
   if (typeof payload !== "string" || payload.trim().length === 0) {
     return "payload must be a non-empty string";
@@ -173,8 +174,12 @@ function validateCreateDropBody(body) {
     return "severity must be LOW, MEDIUM, HIGH, or CRITICAL";
   }
 
-  if (typeof sellerWallet !== "string" || sellerWallet.trim().length === 0) {
-    return "sellerWallet must be a non-empty string";
+  const resolvedWallet = typeof treasuryWallet === "string" && treasuryWallet.trim().length > 0
+    ? treasuryWallet
+    : sellerWallet;
+
+  if (typeof resolvedWallet !== "string" || resolvedWallet.trim().length === 0) {
+    return "treasuryWallet must be a non-empty string";
   }
 
   const parsedTtl = parseTtl(ttl);
@@ -205,6 +210,12 @@ function getDropById(id) {
   return { ...row, used: row.used === 1 };
 }
 
+function getActiveDrops() {
+  const nowIso = new Date().toISOString();
+  const rows = db.prepare(`SELECT * FROM drops WHERE used = 0 AND expiresAt > ?`).all(nowIso);
+  return rows.map(row => ({ ...row, used: row.used === 1 }));
+}
+
 app.use(express.json({ limit: "1mb" }));
 
 app.post("/drop", (req, res) => {
@@ -215,7 +226,10 @@ app.post("/drop", (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const { payload, price, tag, sellerWallet } = req.body;
+  const { payload, price, tag, sellerWallet, treasuryWallet } = req.body;
+  const resolvedWallet = typeof treasuryWallet === "string" && treasuryWallet.trim().length > 0
+    ? treasuryWallet
+    : sellerWallet;
   const teaser = typeof req.body.teaser === "string" && req.body.teaser.length > 0
     ? req.body.teaser
     : "Signal content encrypted. Purchase to reveal.";
@@ -233,7 +247,7 @@ app.post("/drop", (req, res) => {
   db.prepare(`
   INSERT INTO drops (id, encryptedPayload, iv, authTag, price, tag, teaser, severity, sellerWallet, used, createdAt, expiresAt, ttl)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-`).run(id, encrypted.encryptedPayload, encrypted.iv, encrypted.authTag, price, tag, teaser, severity, sellerWallet, createdAt, expiresAt, ttl);
+`).run(id, encrypted.encryptedPayload, encrypted.iv, encrypted.authTag, price, tag, teaser, severity, resolvedWallet, createdAt, expiresAt, ttl);
 
   return res.status(201).json({
     id,
@@ -278,6 +292,7 @@ app.get("/drop/:id", x402Middleware, (req, res) => {
     const id = drop.id;
     const payload = decryptPayload(drop);
     db.prepare('UPDATE drops SET used = 1 WHERE id = ?').run(drop.id);
+    const treasuryWallet = drop.sellerWallet || '';
 
     console.log('[activity] Logging acquisition for drop:', drop.id);
 
@@ -286,7 +301,7 @@ app.get("/drop/:id", x402Middleware, (req, res) => {
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
   drop.id, drop.tag, drop.severity || 'MEDIUM', drop.price || '0.00',
-  drop.sellerWallet || '', new Date().toISOString(),
+  treasuryWallet, new Date().toISOString(),
   req.buyerPublicKey ? 'agent' : 'unknown',
   req.buyerPublicKey ? req.buyerPublicKey.slice(0, 8) + '...' : 'unknown',
   req.txHash || null, req.explorerUrl || null
@@ -298,16 +313,48 @@ app.get("/drop/:id", x402Middleware, (req, res) => {
       tag: drop.tag,
       severity: drop.severity || 'MEDIUM',
       price: drop.price,
-      sellerWallet: drop.sellerWallet || '',
+      treasuryWallet,
       expiresAt: drop.expiresAt,
       buyerKey: req.buyerPublicKey ? req.buyerPublicKey.slice(0, 8) + '...' : 'unknown',
       paidAt: new Date().toISOString(),
-      network: 'stellar-testnet',
+      network: 'base',
+      currency: 'USDC',
       txHash: req.txHash || null,
-      explorerUrl: req.explorerUrl || `https://stellar.expert/explorer/testnet/account/${req.buyerPublicKey || ''}`
+      explorerUrl: req.explorerUrl || null
     });
   } catch (error) {
     return res.status(500).json({ error: "Failed to decrypt signal", details: error.message });
+  }
+});
+
+app.post("/internal/deliver/:id", (req, res) => {
+  const internalSecret = process.env.KEEPER_INTERNAL_SECRET || "";
+  const providedSecret = req.headers["x-keeper-secret"] || "";
+
+  if (!internalSecret || providedSecret !== internalSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const drop = getDropById(req.params.id);
+  if (!drop) {
+    return res.status(404).json({ error: "Signal not found" });
+  }
+
+  try {
+    const payload = decryptPayload(drop);
+    return res.json({
+      id: drop.id,
+      payload,
+      tag: drop.tag,
+      severity: drop.severity || 'MEDIUM',
+      price: drop.price,
+      treasuryWallet: drop.sellerWallet || '',
+      expiresAt: drop.expiresAt,
+      network: 'base',
+      currency: 'USDC'
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to deliver signal", details: error.message });
   }
 });
 
@@ -335,8 +382,29 @@ setInterval(() => {
   cleanupExpiredDrops();
 }, CLEANUP_INTERVAL_MS);
 
+async function syncKeeperHub() {
+  if (!process.env.KH_API_KEY) {
+    return;
+  }
+
+  const activeDrops = getActiveDrops();
+  const activeDropIds = activeDrops.map(drop => drop.id);
+  await syncDropsToKeeperHub(activeDrops);
+  await cleanupExpiredWorkflows(activeDropIds);
+}
+
+const mcpServer = createMCPServer(process.env.BACKEND_URL || `http://localhost:${PORT}`);
+
 app.listen(PORT, () => {
   console.log(`TheKeeper drop server listening on port ${PORT}`);
+  syncKeeperHub().catch((error) => {
+    console.error('[keeperhub] Initial sync failed:', error.message);
+  });
+  setInterval(() => {
+    syncKeeperHub().catch((error) => {
+      console.error('[keeperhub] Sync failed:', error.message);
+    });
+  }, CLEANUP_INTERVAL_MS);
 });
 
 
