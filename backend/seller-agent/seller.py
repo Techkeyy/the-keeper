@@ -1,21 +1,16 @@
-# REDEPLOYED: 2026-04-08 - Updated signals with real teasers and correct severity
 import asyncio
 import os
 from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from stellar_sdk import Keypair, Server
 
 from signals import SIGNALS
 
 load_dotenv()
 
-SELLER_AGENT_SECRET = os.getenv("SELLER_AGENT_SECRET_KEY", "")
-SELLER_AGENT_PUBLIC = os.getenv("SELLER_AGENT_PUBLIC_KEY", "")
-
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:4000")
-SELLER_WALLET = os.getenv("SELLER_WALLET", "GTESTSELLERWALLET123")
+KEEPER_TREASURY_WALLET = os.getenv("KEEPER_TREASURY_WALLET", "")
 POST_INTERVAL = int(os.getenv("POST_INTERVAL", "15"))
 DEFAULT_TTL = int(os.getenv("DEFAULT_TTL", "120"))
 DEFAULT_PRICE = os.getenv("DEFAULT_PRICE", "0.10")
@@ -31,52 +26,24 @@ async def get_active_signal_count(client: httpx.AsyncClient) -> int:
         return 0
 
 
-def get_seller_wallet() -> str:
-    """Get seller agent's own Stellar wallet."""
-    if SELLER_AGENT_SECRET:
-        try:
-            keypair = Keypair.from_secret(SELLER_AGENT_SECRET)
-            return keypair.public_key
-        except Exception:
-            pass
-
-    if SELLER_AGENT_PUBLIC:
-        return SELLER_AGENT_PUBLIC
-
-    return SELLER_WALLET
-
-
-async def check_earnings(public_key: str) -> float:
-    """Check how much XLM the seller agent has earned."""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://horizon-testnet.stellar.org/accounts/{public_key}",
-                timeout=10,
-            )
-            if response.status_code == 200:
-                data = response.json()
-                for balance in data.get("balances", []):
-                    if balance.get("asset_type") == "native":
-                        return float(balance.get("balance", 0))
-    except Exception:
-        pass
-    return 0.0
+def get_treasury_wallet() -> str:
+    return KEEPER_TREASURY_WALLET.strip()
 
 
 def print_banner() -> None:
     print("╔══════════════════════════════════════╗")
-    print("║     TheKeeper — SELLER AGENT      ║")
-    print("║     Autonomous Signal Publisher      ║")
+    print("║          TheKeeper SELLER           ║")
+    print("║     Autonomous Signal Publisher     ║")
     print("╚══════════════════════════════════════╝")
     print()
     print("[SELLER] Starting autonomous signal publisher...")
     print(f"[SELLER] Backend: {BACKEND_URL}")
     print(f"[SELLER] Post interval: {POST_INTERVAL}s | Default TTL: {DEFAULT_TTL}s")
-    seller_wallet = get_seller_wallet()
-    print(f"[SELLER] Wallet: {seller_wallet[:8]}...")
-    print(f"[SELLER] Signals sold go directly to this wallet")
-    print(f"[SELLER] Track earnings: https://stellar.expert/explorer/testnet/account/{seller_wallet}")
+    wallet = get_treasury_wallet()
+    print(f"[SELLER] Treasury wallet: {wallet[:8] if wallet else 'unset'}...")
+    print("[SELLER] Sales settle to the configured Base treasury wallet")
+    if wallet:
+        print(f"[SELLER] Track wallet activity: https://basescan.org/address/{wallet}")
     print()
 
 
@@ -88,7 +55,7 @@ def build_drop_payload(signal: dict[str, Any]) -> dict[str, Any]:
         "price": signal.get("price", DEFAULT_PRICE),
         "tag": signal["tag"],
         "ttl": signal.get("ttl", DEFAULT_TTL),
-        "sellerWallet": get_seller_wallet(),
+        "treasuryWallet": get_treasury_wallet(),
     }
 
 
@@ -140,20 +107,12 @@ async def run_seller() -> None:
                         print("[SELLER] ✓ Signal posted")
                         print(f"  ID      : {short_id}")
                         print(f"  TAG     : {signal['tag']}")
-                        print(f"  PRICE   : {signal.get('price', DEFAULT_PRICE)} XLM")
+                        print(f"  PRICE   : {signal.get('price', DEFAULT_PRICE)} USDC")
                         print(f"  TTL     : {signal.get('ttl', DEFAULT_TTL)}s")
                         print(f"  EXPIRES : {created.get('expiresAt', 'unknown')}")
                         print()
 
                         posted_count += 1
-
-                        if posted_count % 5 == 0 and posted_count > 0:
-                            wallet = get_seller_wallet()
-                            if wallet and not wallet.startswith("GTEST"):
-                                earnings = await check_earnings(wallet)
-                                print(f"[SELLER] 💰 Earnings update: {earnings:.4f} XLM in wallet")
-                                print(f"[SELLER] Explorer: https://stellar.expert/explorer/testnet/account/{wallet}")
-                                print()
                 except Exception as exc:
                     print(f"[SELLER] ✗ Failed to post signal: {exc}")
 
