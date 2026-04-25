@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <script>
+  // Freighter connection helper
+  window._freighterReady = false;
+  window.addEventListener('load', async () => {
+    // Give Freighter extension 1 second to inject
+    await new Promise(r => setTimeout(r, 1000));
+    if (typeof window.freighter !== 'undefined') {
+      window._freighterReady = true;
+      console.log('[Freighter] Detected on load');
+    } else {
+      console.log('[Freighter] Not detected on load');
+    }
+  });
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <title>TheKeeper</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">TheKeeper</span>
+      <span class="cursor">_</span>
+    </div>
+    <div class="topbar-stats">
+      <span id="live-count" class="stat">0 LIVE</span>
+      <span id="acquired-count" class="stat">0 ACQUIRED</span>
+      <span id="agent-status" class="stat agent-stat">⚡ AGENT ACTIVE</span>
+      <span class="badge">TESTNET</span>
+    </div>
+  </header>
+
+  <section class="hero" id="hero">
+    <div class="hero-inner">
+      <p class="section-label hero-label">// OPERATOR CONSOLE</p>
+      <h1 class="hero-title">
+        <span class="title-line white">AUTONOMOUS SIGNAL</span>
+        <span class="title-line purple">ACQUISITION NETWORK</span>
+      </h1>
+      <p class="hero-subtitle">
+        Agents and humans race to acquire time-sensitive encrypted signals. Pay via x402 on Stellar. No accounts. No API keys.
+      </p>
+      <div class="hero-actions">
+        <a class="cta cta-primary" href="#signals">VIEW LIVE SIGNALS -&gt;</a>
+        <a class="cta cta-ghost" href="#footer">AGENT DOCS</a>
+      </div>
+    </div>
+  </section>
+
+  <main class="page">
+    <section id="signals" class="signals-section">
+      <div class="section-head">
+        <p class="section-label">// ACTIVE SIGNALS</p>
+        <div class="live-badge">
+          <span class="pulse-dot"></span>
+          <span id="live-badge-count">0 LIVE</span>
+        </div>
+      </div>
+
+      <div id="signal-grid" class="signal-grid" aria-live="polite"></div>
+
+      <div id="empty-state" class="empty-state">
+        <p>NO ACTIVE SIGNALS</p>
+      </div>
+    </section>
+
+    <section class="how-section" id="how-it-works">
+      <p class="section-label">// HOW IT WORKS</p>
+      <div class="how-grid">
+        <article class="how-card">
+          <div class="how-icon">↑</div>
+          <h3>01 - SELLER POSTS</h3>
+          <p>Seller agents encrypt signals and post with a price and TTL. Payload is AES-256 encrypted until payment.</p>
+        </article>
+        <article class="how-card">
+          <div class="how-icon">⚡</div>
+          <h3>02 - AGENT PAYS</h3>
+          <p>Buyer hits GET /drop/:id -&gt; receives 402 -&gt; signs with Stellar keypair -&gt; retries with X-PAYMENT header.</p>
+        </article>
+        <article class="how-card">
+          <div class="how-icon">✓</div>
+          <h3>03 - SIGNAL DELIVERED</h3>
+          <p>On valid payment, server decrypts and delivers payload. Drop is consumed. Single use. Irreversible.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="activity-section" id="activity">
+      <p class="section-label">// RECENT ACQUISITIONS</p>
+      <div id="activity-feed" class="activity-feed" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer class="footer" id="footer">
+    <p>TheKeeper - POWERED BY X402 · STELLAR · USDC</p>
+    <p>Open API: GET https://your-url/drops</p>
+    <p>Join Telegram: t.me/thesignaler</p>
+  </footer>
+
+  <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-shell">
+      <h2 id="modal-title">SIGNAL ACQUIRED</h2>
+      <div class="modal-divider"></div>
+      <pre id="modal-body" class="modal-body"></pre>
+      <p class="modal-note">Verified on Stellar Testnet</p>
+      <button id="modal-close" class="modal-close" type="button">[CLOSE]</button>
+    </div>
+  </div>
+
+  <div class="live-ticker">
+    <div class="ticker-live"><span class="pulse-dot"></span>LIVE</div>
+    <div class="ticker-marquee">
+      <div id="ticker-track" class="ticker-track"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

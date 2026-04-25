@@ -1,0 +1,4 @@
+httpx
+stellar-sdk
+python-dotenv
+google-generativeai
