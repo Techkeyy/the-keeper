@@ -1,3 +1,2 @@
 httpx
-stellar-sdk
 python-dotenv
