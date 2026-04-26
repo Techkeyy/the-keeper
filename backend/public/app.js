@@ -1,246 +1,246 @@
 const BACKEND = "";
 const POLL_INTERVAL = 15000;
 const COUNTDOWN_INTERVAL = 1000;
+const BACKEND = "";
+const POLL_MS = 12000;
 
-let signalsById = new Map();
+let drops = new Map();
+let acquiredIds = new Set();
 let acquiredCount = 0;
 let activityItems = [];
-let modalTimer = null;
-let lastKnownConsumed = new Set();
-let signalCache = [];
-let activeDropMeta = new Map();
-let discoveredIds = new Set();
-let activeTab = 'ALL';
-let agentScans = 0;
-let agentAcquired = 0;
-let agentSpent = 0;
-let agentLogEntries = [];
-let connectedWalletKey = null;
-
-// MY SIGNALS - persisted in localStorage
+let activeFilter = "ALL";
 let mySignals = [];
+let connectedWallet = null;
 
 function loadMySignals() {
-  try {
-    const stored = localStorage.getItem('thekeeper-purchases');
-    mySignals = stored ? JSON.parse(stored) : [];
-    // Clean up expired signals older than 7 days
-    const cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    mySignals = mySignals.filter(s => new Date(s.purchasedAt).getTime() > cutoff);
-    saveMySignals();
-  } catch(e) {
-    mySignals = [];
-  }
+  try { mySignals = JSON.parse(localStorage.getItem("tk-signals") || "[]"); } catch { mySignals = []; }
 }
-
 function saveMySignals() {
-  try {
-    localStorage.setItem('thekeeper-purchases', JSON.stringify(mySignals));
-  } catch(e) {}
+  try { localStorage.setItem("tk-signals", JSON.stringify(mySignals)); } catch {}
 }
-
-function addToMySignals(payloadData, dropId) {
-  const signal = {
-    id: payloadData.id || dropId,
-    tag: payloadData.tag || 'unknown',
-    severity: payloadData.severity || 'MEDIUM',
-    payload: payloadData.payload || '',
-    buyerKey: payloadData.buyerKey || 'unknown',
-    txHash: payloadData.txHash || null,
-    explorerUrl: payloadData.explorerUrl || null,
-    purchasedAt: new Date().toISOString(),
-    expiresAt: payloadData.expiresAt || null,
-    price: payloadData.price || '0.00'
-  };
-
-  // Avoid duplicates
-  if (!mySignals.find(s => s.id === signal.id)) {
-    mySignals.unshift(signal);
+function addMySignal(data, dropId) {
+  if (!mySignals.find(s => s.id === (data.id || dropId))) {
+    mySignals.unshift({ id: data.id || dropId, tag: data.tag, severity: data.severity, payload: data.payload, price: data.price, purchasedAt: new Date().toISOString(), explorerUrl: data.explorerUrl || null });
     saveMySignals();
   }
-
-  // Update MY SIGNALS tab count
-  const countEl = document.getElementById('count-MINE');
-  if (countEl) countEl.textContent = mySignals.length;
+  document.getElementById("filter-row").querySelector("[data-filter='MINE']").textContent = `Mine (${mySignals.length})`;
 }
 
-function renderMySignals() {
-  const grid = document.getElementById('signal-grid');
-  const emptyState = document.getElementById('empty-state');
-  const emptyTitle = emptyState?.querySelector('.empty-title');
-  const emptyCopy = emptyState?.querySelector('.empty-copy');
-
-  if (mySignals.length === 0) {
-    grid.innerHTML = '';
-    emptyState.classList.remove('hidden');
-    if (emptyTitle) emptyTitle.textContent = 'NO PURCHASED SIGNALS';
-    if (emptyCopy) emptyCopy.textContent = 'Signals you acquire will appear here.';
-    return;
-  }
-
-  emptyState.classList.add('hidden');
-  grid.innerHTML = '';
-
-  mySignals.forEach(signal => {
-    const card = document.createElement('div');
-    card.className = 'my-signal-card';
-
-    const now = Date.now();
-    const expiresAt = signal.expiresAt ? new Date(signal.expiresAt).getTime() : null;
-    const isExpired = Boolean(expiresAt && now > expiresAt);
-    if (isExpired) card.classList.add('my-signal-expired');
-
-    const secondsLeft = expiresAt ? Math.max(0, Math.floor((expiresAt - now) / 1000)) : null;
-    const expiryText = isExpired
-      ? 'EXPIRED'
-      : secondsLeft
-        ? formatCountdown(secondsLeft)
-        : 'NO EXPIRY';
-
-    const purchasedTime = new Date(signal.purchasedAt).toLocaleTimeString();
-
-    card.innerHTML = `
-      <div class="signal-acquired-badge">✓ ACQUIRED AT ${purchasedTime}</div>
-      <div class="card-top">
-        <span class="tag-badge">${signal.tag}</span>
-        <span class="severity severity-${signal.severity.toLowerCase()}">${signal.severity}</span>
-        <span class="price">${signal.price} XLM</span>
-        <span class="drop-id">${signal.id.slice(0,8)}</span>
-      </div>
-      <div class="signal-payload-full">${signal.payload.replace(/\n/g, '<br>')}</div>
-      <div class="signal-meta-row">
-        <span>BUYER: ${signal.buyerKey}</span>
-        <span>NETWORK: Stellar Testnet</span>
-        <span class="my-signal-expires">${expiryText}</span>
-      </div>
-      ${signal.explorerUrl ? `<a class="explorer-link" href="${signal.explorerUrl}" target="_blank">→ VIEW ON STELLAR EXPLORER</a>` : ''}
-    `;
-
-    grid.appendChild(card);
-  });
+function pad(n) { return String(n).padStart(2, "0"); }
+function fmt(s) {
+  if (s <= 0) return "Expired";
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (d > 0) return `${d}d ${pad(h)}h remaining`;
+  if (h > 0) return `${pad(h)}h ${pad(m)}m remaining`;
+  return `${pad(m)}:${pad(sec)}`;
 }
-
-function formatTimeLabel() {
-  return new Date().toLocaleTimeString();
-}
-
-function formatShortId(id) {
-  return String(id || "").slice(0, 8);
-}
-
-function formatTag(tag) {
-  return String(tag || "unknown").replace(/_/g, " ").toUpperCase();
-}
-
-function pad(value) {
-  return String(value).padStart(2, "0");
-}
-
-function formatCountdown(secondsRemaining) {
-  if (secondsRemaining <= 0) return 'EXPIRED';
-
-  const days = Math.floor(secondsRemaining / 86400);
-  const hours = Math.floor((secondsRemaining % 86400) / 3600);
-  const minutes = Math.floor((secondsRemaining % 3600) / 60);
-  const seconds = secondsRemaining % 60;
-
-  if (days > 0) {
-    return `EXPIRES IN ${days}d ${pad(hours)}h`;
-  }
-  if (hours > 0) {
-    return `EXPIRES IN ${pad(hours)}h ${pad(minutes)}m`;
-  }
-  return `EXPIRES IN ${pad(minutes)}:${pad(seconds)}`;
-}
-
-function getCountdownClass(secondsRemaining) {
-  if (secondsRemaining <= 0) return "expired";
-  if (secondsRemaining < 30) return "danger";
-  return "warning";
-}
-
-function setHeaderStats(liveCount) {
-  const liveEl = document.getElementById('live-count');
-  const acquiredEl = document.getElementById('acquired-count');
-  const liveBadge = document.getElementById('live-badge');
-  if (liveEl) liveEl.textContent = `${liveCount} LIVE SIGNALS`;
-  if (acquiredEl) acquiredEl.textContent = `${acquiredCount} ACQUIRED`;
-  if (liveBadge) liveBadge.textContent = `● ${liveCount} LIVE`;
-}
-
-function addAgentLog(message, type = 'scanning') {
-  const time = formatTimeLabel();
-  agentLogEntries.unshift({ time, message, type });
-  agentLogEntries = agentLogEntries.slice(0, 20);
-
-  const log = document.getElementById('agent-log');
-  if (!log) return;
-
-  log.innerHTML = agentLogEntries.map(entry => `
-    <div class="agent-log-entry ${entry.type}">
-      <span class="feed-time">[${entry.time}]</span> ${entry.message}
-    </div>
-  `).join('');
-}
-
-function updateAgentStats() {
-  const scansEl = document.getElementById('agent-scans');
-  const acquiredEl = document.getElementById('agent-acquired');
-  const spentEl = document.getElementById('agent-spent');
-  if (scansEl) scansEl.textContent = agentScans;
-  if (acquiredEl) acquiredEl.textContent = agentAcquired;
-  if (spentEl) spentEl.textContent = agentSpent.toFixed(2);
-}
+function cntClass(s) { return s <= 0 ? "expired" : s < 30 ? "danger" : ""; }
+function sevClass(sev) { return (sev || "").toLowerCase(); }
+function fmtTag(t) { return String(t || "").replace(/_/g, " ").toUpperCase(); }
 
 async function fetchDrops() {
   try {
-    const response = await fetch(`${BACKEND}/drops`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
-  } catch (error) {
-    console.error("[frontend] Failed to fetch drops:", error.message);
-    console.error("[frontend] Backend URL:", BACKEND);
-    return [];
+    const r = await fetch(`${BACKEND}/drops`);
+    if (!r.ok) return [];
+    const d = await r.json();
+    return Array.isArray(d) ? d : [];
+  } catch { return []; }
+}
+
+function buildCard(drop) {
+  const el = document.createElement("article");
+  el.className = `signal-card sev-${sevClass(drop.severity)}`;
+  el.dataset.id = drop.id;
+  const s = Number(drop.secondsRemaining || 0);
+  el.innerHTML = `
+    <div class="card-top">
+      <span class="tag-pill">${fmtTag(drop.tag)}</span>
+      <span class="sev-badge ${sevClass(drop.severity)}">${drop.severity || "MEDIUM"}</span>
+      <span class="card-price">${drop.price || "0.00"} USDC</span>
+      <span class="card-id">${String(drop.id).slice(0,8)}</span>
+    </div>
+    <div class="card-teaser">${drop.teaser || "Signal content encrypted. Acquire to unlock."}</div>
+    <div class="card-countdown ${cntClass(s)}" data-cd="${drop.id}">${fmt(s)}</div>
+    <div class="card-bottom">
+      <span class="card-status" data-st="${drop.id}"><span class="status-dot"></span><span data-stl="${drop.id}">${s <= 0 ? "Expired" : "Available"}</span></span>
+      <button class="btn-acquire" data-acq="${drop.id}" data-price="${drop.price || "0.00"}" ${s <= 0 || drop.used ? "disabled" : ""}>
+        Acquire — ${drop.price || "0.00"} USDC
+      </button>
+    </div>`;
+  return el;
+}
+
+function renderSignals(list) {
+  const grid = document.getElementById("signal-grid");
+  const empty = document.getElementById("empty-state");
+  if (activeFilter === "MINE") { renderMine(); return; }
+  const visible = list.filter(d => !d.used && Number(d.secondsRemaining || 0) > 0);
+  const filtered = activeFilter === "ALL" ? visible : visible.filter(d => (d.severity || "").toUpperCase() === activeFilter);
+  const sorted = [...filtered].sort((a, b) => { const o = {CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3}; return (o[a.severity]??2) - (o[b.severity]??2) || Number(a.secondsRemaining) - Number(b.secondsRemaining); });
+  document.getElementById("live-count").textContent = `${visible.length} LIVE`;
+  document.getElementById("stat-live").textContent = visible.length;
+  document.getElementById("live-pill-count").textContent = `${visible.length} live`;
+  const cur = new Set(Array.from(grid.querySelectorAll(".signal-card")).map(c => c.dataset.id));
+  const next = new Set(sorted.map(d => d.id));
+  cur.forEach(id => { if (!next.has(id)) { const el = grid.querySelector(`[data-id="${id}"]`); if (el) { el.style.opacity="0"; setTimeout(()=>el.remove(),300); } } });
+  sorted.forEach(d => { if (!cur.has(d.id)) { grid.appendChild(buildCard(d)); drops.set(d.id, d); } });
+  empty.classList.toggle("hidden", sorted.length > 0);
+}
+
+function renderMine() {
+  const grid = document.getElementById("signal-grid");
+  const empty = document.getElementById("empty-state");
+  grid.innerHTML = "";
+  if (mySignals.length === 0) { empty.classList.remove("hidden"); return; }
+  empty.classList.add("hidden");
+  mySignals.forEach(s => {
+    const el = document.createElement("article");
+    el.className = `signal-card sev-${sevClass(s.severity)}`;
+    el.innerHTML = `
+      <div class="card-top">
+        <span class="tag-pill">${fmtTag(s.tag)}</span>
+        <span class="sev-badge ${sevClass(s.severity)}">${s.severity}</span>
+        <span class="card-price">${s.price} USDC</span>
+        <span class="card-id">${String(s.id).slice(0,8)}</span>
+      </div>
+      <div class="card-teaser" style="color:var(--text)">${(s.payload||"").replace(/\n/g,"<br>")}</div>
+      ${s.explorerUrl ? `<a href="${s.explorerUrl}" target="_blank" style="font-family:var(--font-mono);font-size:11px;color:var(--green);">View on BaseScan →</a>` : ""}
+      <div class="card-bottom"><span class="card-status"><span class="status-dot"></span>Acquired</span></div>`;
+    grid.appendChild(el);
+  });
+}
+
+function updateCountdowns() {
+  document.querySelectorAll(".signal-card[data-id]").forEach(card => {
+    const drop = drops.get(card.dataset.id);
+    if (!drop) return;
+    const s = Math.max(0, Math.floor((new Date(drop.expiresAt).getTime() - Date.now()) / 1000));
+    const cd = card.querySelector(`[data-cd="${drop.id}"]`);
+    const st = card.querySelector(`[data-st="${drop.id}"]`);
+    const stl = card.querySelector(`[data-stl="${drop.id}"]`);
+    const btn = card.querySelector("[data-acq]");
+    if (cd) { cd.textContent = fmt(s); cd.className = `card-countdown ${cntClass(s)}`; }
+    if (s <= 0) { if (stl) stl.textContent = "Expired"; if (st) st.classList.add("expired"); if (btn) btn.disabled = true; }
+  });
+}
+
+function pushActivity(item) {
+  activityItems.unshift(item);
+  activityItems = activityItems.slice(0, 8);
+  const feed = document.getElementById("activity-feed");
+  const empty = document.getElementById("feed-empty");
+  if (empty) empty.style.display = "none";
+  feed.innerHTML = activityItems.map(a => `
+    <div class="activity-row">
+      <span class="feed-time">${a.time}</span>
+      <span class="feed-id">${a.id}</span>
+      <span class="feed-tag">${fmtTag(a.tag)}</span>
+      <span class="feed-sev">${a.severity || ""}</span>
+      <span class="feed-price">${a.price || ""} USDC</span>
+      <span class="feed-status"><span class="pulse-dot" style="width:5px;height:5px"></span>${a.label}</span>
+    </div>`).join("");
+  updateTicker();
+}
+
+function updateTicker() {
+  const t = document.getElementById("ticker-track");
+  if (!t) return;
+  if (activityItems.length === 0) { t.textContent = "Awaiting signal acquisitions from agents and operators..."; return; }
+  const str = activityItems.map(a => `[${a.time}] ${a.id} — ${fmtTag(a.tag)} — ${a.label}`).join("  ·  ");
+  t.textContent = str + "  ·  " + str;
+}
+
+function showModal(data, dropId) {
+  addMySignal(data, dropId);
+  const overlay = document.getElementById("modal-overlay");
+  const body = document.getElementById("modal-body");
+  body.textContent = [
+    `Signal ID : ${String(data.id || dropId).slice(0,8)}`,
+    `Tag       : ${data.tag || "unknown"}`,
+    `Severity  : ${data.severity || "MEDIUM"}`,
+    `Price     : ${data.price || "0.00"} USDC`,
+    `Network   : Base Sepolia`,
+    ``,
+    data.payload || ""
+  ].join("\n");
+  overlay.classList.remove("hidden");
+  setTimeout(() => overlay.classList.add("hidden"), 20000);
+}
+
+async function acquireSignal(dropId, price) {
+  try {
+    const r1 = await fetch(`${BACKEND}/drop/${dropId}`);
+    if (r1.status === 410) { alert("Signal expired or already consumed."); return; }
+    if (r1.status !== 402) throw new Error(`Expected 402, got ${r1.status}`);
+    const challenge = await r1.json();
+    const treasury = challenge.treasuryWallet || "unknown";
+    const amount = challenge.amount || price;
+    const network = challenge.network || "base";
+    alert(`Payment required\n\nSend ${amount} USDC on ${network} to:\n${treasury}\n\nMemo: signal:${dropId.slice(0,18)}\n\nFor autonomous payment, install the KeeperHub agentic wallet:\nnpx @keeperhub/wallet skill install\n\nFor demo, this window will auto-close.`);
+    acquiredCount++;
+    pushActivity({ time: new Date().toLocaleTimeString(), id: String(dropId).slice(0,8), tag: drops.get(dropId)?.tag || "unknown", severity: drops.get(dropId)?.severity || "", price: amount, label: "Payment prompted" });
+  } catch (err) {
+    console.error("[acquire]", err);
+    alert("Acquisition failed: " + err.message);
   }
 }
 
-function createSignalCard(drop, isNew) {
-  const card = document.createElement("article");
-  card.className = "signal-card";
-  card.dataset.dropId = drop.id;
-  const secondsRemaining = Number(drop.secondsRemaining || 0);
-  const countdownClass = getCountdownClass(secondsRemaining);
+async function checkActivity() {
+  try {
+    const r = await fetch(`${BACKEND}/activity`);
+    if (!r.ok) return;
+    const items = await r.json();
+    items.forEach(a => {
+      if (!acquiredIds.has(a.dropId)) {
+        acquiredIds.add(a.dropId);
+        acquiredCount++;
+        document.getElementById("acquired-count").textContent = `${acquiredCount} ACQUIRED`;
+        document.getElementById("stat-acquired").textContent = acquiredCount;
+        pushActivity({ time: new Date(a.acquiredAt || Date.now()).toLocaleTimeString(), id: String(a.dropId).slice(0,8), tag: a.tag, severity: a.severity, price: a.price, label: "Agent acquired" });
+      }
+    });
+  } catch {}
+}
 
-  function buildPreview(dropData) {
-    const tag = dropData.tag || '';
-    const teaser = dropData.teaser || '';
-    const severity = dropData.severity || 'MEDIUM';
+function wireUI() {
+  document.getElementById("signal-grid").addEventListener("click", e => {
+    const btn = e.target.closest("[data-acq]");
+    if (btn && !btn.disabled) acquireSignal(btn.dataset.acq, btn.dataset.price);
+  });
+  document.getElementById("filter-row").addEventListener("click", e => {
+    const btn = e.target.closest(".filter-btn");
+    if (!btn) return;
+    document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeFilter = btn.dataset.filter;
+    document.getElementById("signal-grid").innerHTML = "";
+    if (activeFilter === "MINE") renderMine();
+    else fetchDrops().then(renderSignals);
+  });
+  const close = () => document.getElementById("modal-overlay").classList.add("hidden");
+  document.getElementById("modal-close").addEventListener("click", close);
+  document.getElementById("modal-confirm").addEventListener("click", close);
+  document.getElementById("modal-overlay").addEventListener("click", e => { if (e.target === e.currentTarget) close(); });
+  document.getElementById("connect-btn").addEventListener("click", () => {
+    alert("Connect your Base Sepolia wallet.\n\nFor autonomous payment, install the KeeperHub agentic wallet:\nnpx @keeperhub/wallet skill install\n\nOr use any Base Sepolia compatible wallet.");
+  });
+}
 
-    const domainMap = {
-      trading_signal: 'Market activity detected',
-      logistics_alert: 'Supply chain development',
-      intelligence: 'Intelligence report available',
-      research: 'Research finding available',
-      weather_alert: 'Environmental event flagged',
-      sports_intel: 'Sports market movement'
-    };
+async function tick() {
+  const list = await fetchDrops();
+  list.forEach(d => drops.set(d.id, d));
+  renderSignals(list);
+  await checkActivity();
+}
 
-    const domain = domainMap[tag] || 'Signal available';
-
-    // Extract first meaningful phrase from teaser
-    // Split by '.', take first sentence, strip generic words
-    const sentences = teaser.split('.');
-    const first = sentences[0] ? sentences[0].trim() : '';
-
-    // If first sentence exists and is not too generic
-    // (not just "Signal content encrypted" or similar)
-    const isGeneric = first.toLowerCase().includes('encrypted')
-      || first.toLowerCase().includes('purchase to reveal')
-      || first.length < 15;
-
+document.addEventListener("DOMContentLoaded", () => {
+  loadMySignals();
+  wireUI();
+  tick();
+  setInterval(tick, POLL_MS);
+  setInterval(updateCountdowns, 1000);
+  setInterval(checkActivity, 8000);
+});
     if (!isGeneric && first.length > 0) {
       return domain + ' — ' + first.toLowerCase() + '.';
     }

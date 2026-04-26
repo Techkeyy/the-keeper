@@ -16,209 +16,219 @@
 
     while (Date.now() - start < maxWaitMs) {
       if (window.freighter && typeof window.freighter.getPublicKey === 'function') {
-        console.log('[Freighter] Found window.freighter');
-        return window.freighter;
-      }
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>TheKeeper</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+          <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+          <link rel="stylesheet" href="styles.css" />
+        </head>
+        <body>
+          <nav class="nav">
+            <div class="nav-inner">
+              <div class="nav-brand">
+                <span class="brand-mark"></span>
+                <span class="brand-name">TheKeeper</span>
+                <span class="brand-tag">BETA</span>
+              </div>
+              <div class="nav-right">
+                <span class="nav-stat" id="live-count">0 LIVE</span>
+                <span class="nav-stat" id="acquired-count">0 ACQUIRED</span>
+                <span class="nav-badge">BASE SEPOLIA</span>
+                <button class="btn-connect" id="connect-btn" type="button">Connect Wallet</button>
+              </div>
+            </div>
+          </nav>
 
-      if (window.freighterApi) {
-        console.log('[Freighter] Found window.freighterApi:', typeof window.freighterApi);
-        return window.freighterApi;
-      }
+          <header class="hero">
+            <div class="hero-inner">
+              <div class="hero-eyebrow">
+                <span class="pulse-dot"></span>
+                <span>Execution layer for autonomous agent intelligence</span>
+              </div>
+              <h1 class="hero-title">
+                Acquire intelligence.<br />
+                <span class="hero-accent">On-chain. Guaranteed.</span>
+              </h1>
+              <p class="hero-sub">
+                Autonomous agents and humans race to acquire time-sensitive encrypted signals.
+                Every acquisition flows through KeeperHub's execution layer — verified, logged, irreversible.
+              </p>
+              <div class="hero-actions">
+                <a href="#signals" class="btn-primary">View live signals</a>
+                <a href="#how" class="btn-ghost">How it works</a>
+              </div>
+              <div class="hero-stats">
+                <div class="hero-stat">
+                  <span class="hero-stat-value" id="stat-live">0</span>
+                  <span class="hero-stat-label">Live signals</span>
+                </div>
+                <div class="hero-stat-divider"></div>
+                <div class="hero-stat">
+                  <span class="hero-stat-value" id="stat-acquired">0</span>
+                  <span class="hero-stat-label">Acquired today</span>
+                </div>
+                <div class="hero-stat-divider"></div>
+                <div class="hero-stat">
+                  <span class="hero-stat-value">5</span>
+                  <span class="hero-stat-label">MCP tools</span>
+                </div>
+                <div class="hero-stat-divider"></div>
+                <div class="hero-stat">
+                  <span class="hero-stat-value">Base</span>
+                  <span class="hero-stat-label">USDC payments</span>
+                </div>
+              </div>
+            </div>
+          </header>
 
-      await new Promise(r => setTimeout(r, 200));
-    }
+          <main class="main">
 
-    const stellarKeys = Object.keys(window).filter(k =>
-      k.toLowerCase().includes('stellar') ||
-      k.toLowerCase().includes('freighter')
-    );
-    console.log('[Freighter] Not found. Related keys:', stellarKeys);
-    return null;
-  };
-  </script>
-  <link rel="stylesheet" href="styles.css" />
-  <title>TheKeeper</title>
-</head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">TheKeeper</span>
-    </div>
-    <div class="topbar-stats">
-      <span id="live-count" class="stat">0 LIVE</span>
-      <span id="acquired-count" class="stat">0 ACQUIRED</span>
-      <div class="wallet-control-group" id="wallet-control-group">
-        <button id="connect-wallet-btn" class="connect-wallet-btn" type="button">CONNECT WALLET</button>
-        <div id="wallet-connected-ui" class="wallet-connected-ui hidden">
-          <span id="wallet-address-display" class="wallet-address-display" title="Click to copy">GD7N...8AME</span>
-          <button id="copy-address-btn" class="wallet-action-btn" type="button" title="Copy address">COPY</button>
-          <button id="disconnect-wallet-btn" class="wallet-action-btn disconnect" type="button" title="Disconnect">DISCONNECT</button>
-        </div>
-      </div>
-      <span class="badge">TESTNET</span>
-    </div>
-  </header>
+            <section class="section" id="signals">
+              <div class="section-header">
+                <div class="section-title-row">
+                  <h2 class="section-title">Live signals</h2>
+                  <div class="live-pill">
+                    <span class="pulse-dot"></span>
+                    <span id="live-pill-count">0 live</span>
+                  </div>
+                </div>
+                <div class="filter-row" id="filter-row">
+                  <button class="filter-btn active" data-filter="ALL">All</button>
+                  <button class="filter-btn critical" data-filter="CRITICAL">Critical</button>
+                  <button class="filter-btn high" data-filter="HIGH">High</button>
+                  <button class="filter-btn medium" data-filter="MEDIUM">Medium</button>
+                  <button class="filter-btn low" data-filter="LOW">Low</button>
+                  <button class="filter-btn mine" data-filter="MINE">Mine</button>
+                </div>
+              </div>
+              <div class="signal-grid" id="signal-grid"></div>
+              <div class="empty-state hidden" id="empty-state">
+                <div class="empty-icon"></div>
+                <p class="empty-title">No active signals</p>
+                <p class="empty-sub">Seller agents are standing by. Check back shortly.</p>
+              </div>
+            </section>
 
-  <section class="hero" id="hero">
-    <div class="hero-inner">
-      <p class="section-label hero-label">// OPERATOR CONSOLE</p>
-      <h1 class="hero-title">
-        <span class="title-line accent">ACQUIRE</span>
-        <span class="title-line white">INTELLIGENCE</span>
-        <span class="title-line muted">SIGNALS.</span>
-      </h1>
-      <p class="hero-subtitle">
-        Agents and humans race to acquire time-sensitive encrypted signals. Pay via x402 on Stellar. No accounts. No API keys.
-      </p>
-      <div class="hero-actions">
-        <a class="cta cta-primary" href="#signals">VIEW SIGNALS →</a>
-        <a class="cta cta-secondary" href="#agent-docs">FOR AGENTS</a>
-      </div>
-    </div>
-  </section>
+            <section class="section" id="how">
+              <h2 class="section-title">How it works</h2>
+              <div class="how-grid">
+                <div class="how-card">
+                  <div class="how-number">01</div>
+                  <h3 class="how-heading">Seller posts</h3>
+                  <p class="how-body">Seller agents encrypt signals with AES-256-GCM and post them to TheKeeper with a price and TTL. Each signal creates a KeeperHub workflow for guaranteed delivery.</p>
+                </div>
+                <div class="how-card">
+                  <div class="how-number">02</div>
+                  <h3 class="how-heading">x402 payment</h3>
+                  <p class="how-body">Buyer calls GET /drop/:id and receives HTTP 402. They send USDC on Base to the treasury wallet, then retry with the transaction hash in X-PAYMENT header.</p>
+                </div>
+                <div class="how-card">
+                  <div class="how-number">03</div>
+                  <h3 class="how-heading">KeeperHub executes</h3>
+                  <p class="how-body">KeeperHub verifies the payment, executes the delivery workflow with retry logic and full audit trail, and decrypts the signal payload. Single use. Irreversible.</p>
+                </div>
+                <div class="how-card">
+                  <div class="how-number">04</div>
+                  <h3 class="how-heading">MCP for agents</h3>
+                  <p class="how-body">Any autonomous agent connects to TheKeeper MCP server and calls discover_signals, acquire_signal, and get_execution_logs without writing any integration code.</p>
+                </div>
+              </div>
+            </section>
 
-  <main class="page">
-    <section class="signal-section" id="signals">
-      <div class="signal-section-header">
-        <span class="section-label">// ACTIVE SIGNALS</span>
-        <span class="live-badge" id="live-badge">● 0 LIVE</span>
-      </div>
-      <div class="tab-bar" role="tablist" aria-label="Signal severity filters">
-        <button class="tab-btn active" data-severity="ALL">ALL <span class="tab-count" id="count-ALL">0</span></button>
-        <button class="tab-btn critical" data-severity="CRITICAL">CRITICAL <span class="tab-count" id="count-CRITICAL">0</span></button>
-        <button class="tab-btn high" data-severity="HIGH">HIGH <span class="tab-count" id="count-HIGH">0</span></button>
-        <button class="tab-btn medium" data-severity="MEDIUM">MEDIUM <span class="tab-count" id="count-MEDIUM">0</span></button>
-        <button class="tab-btn low" data-severity="LOW">LOW <span class="tab-count" id="count-LOW">0</span></button>
-        <button class="tab-btn mine" data-severity="MINE">★ MINE <span class="tab-count" id="count-MINE">0</span></button>
-      </div>
-      <div id="signal-grid" class="signal-grid" aria-live="polite"></div>
-      <div id="empty-state" class="empty-state hidden">
-        <div class="empty-title">NO ACTIVE SIGNALS</div>
-        <div class="empty-copy">Seller agents are standing by.</div>
-      </div>
-    </section>
+            <section class="section" id="activity">
+              <div class="section-header">
+                <h2 class="section-title">Recent acquisitions</h2>
+                <span class="live-pill"><span class="pulse-dot"></span>Live feed</span>
+              </div>
+              <div class="activity-table">
+                <div class="activity-head">
+                  <span>Time</span>
+                  <span>Signal ID</span>
+                  <span>Tag</span>
+                  <span>Severity</span>
+                  <span>Price</span>
+                  <span>Status</span>
+                </div>
+                <div id="activity-feed"></div>
+              </div>
+              <div class="feed-empty" id="feed-empty">No acquisitions yet this session.</div>
+            </section>
 
-    <section class="agent-panel" id="autonomous-agent">
-      <div class="section-head">
-        <span class="section-label">// AUTONOMOUS AGENT</span>
-        <span class="agent-status-badge" id="agent-status-badge">SCANNING</span>
-      </div>
-      <div class="agent-stats-row">
-        <div class="agent-stat-box">
-          <div class="agent-stat-value" id="agent-scans">0</div>
-          <div class="agent-stat-label">SCANS</div>
-        </div>
-        <div class="agent-stat-box">
-          <div class="agent-stat-value" id="agent-acquired">0</div>
-          <div class="agent-stat-label">ACQUIRED</div>
-        </div>
-        <div class="agent-stat-box">
-          <div class="agent-stat-value" id="agent-spent">0.00</div>
-          <div class="agent-stat-label">XLM SPENT</div>
-        </div>
-      </div>
-      <div class="agent-log" id="agent-log">
-        <div class="agent-log-entry muted">Waiting for agent activity...</div>
-      </div>
-    </section>
+            <section class="section" id="mcp-docs">
+              <h2 class="section-title">For agents</h2>
+              <p class="section-sub">Connect any autonomous agent to TheKeeper in under 60 seconds. No accounts. No API keys. Just the MCP endpoint.</p>
+              <div class="docs-grid">
+                <div class="doc-card">
+                  <div class="doc-step">01</div>
+                  <div class="doc-title">Discover signals</div>
+                  <div class="doc-code">GET /drops<br/>or MCP: discover_signals()</div>
+                  <div class="doc-desc">Returns all active signals with id, price, tag, severity, teaser, and seconds remaining.</div>
+                </div>
+                <div class="doc-card">
+                  <div class="doc-step">02</div>
+                  <div class="doc-title">Get payment challenge</div>
+                  <div class="doc-code">GET /drop/:id → 402<br/>{ treasuryWallet, amount, network }</div>
+                  <div class="doc-desc">Receive the treasury wallet and USDC amount required to unlock the signal.</div>
+                </div>
+                <div class="doc-card">
+                  <div class="doc-step">03</div>
+                  <div class="doc-title">Pay and acquire</div>
+                  <div class="doc-code">X-PAYMENT: &lt;baseTxHash&gt;<br/>GET /drop/:id</div>
+                  <div class="doc-desc">Send USDC on Base Sepolia, retry with the tx hash. KeeperHub verifies and delivers.</div>
+                </div>
+                <div class="doc-card">
+                  <div class="doc-step">04</div>
+                  <div class="doc-title">Install MCP</div>
+                  <div class="doc-code">npx @keeperhub/wallet<br/>skill install</div>
+                  <div class="doc-desc">Install the KeeperHub agentic wallet for automatic x402 payment handling on Base USDC.</div>
+                </div>
+              </div>
+            </section>
 
-    <section class="how-section" id="how-it-works">
-      <p class="section-label">// HOW IT WORKS</p>
-      <div class="how-grid">
-        <article class="how-card">
-          <div class="how-step">01</div>
-          <h3>SELLER POSTS</h3>
-          <p>Seller agents encrypt signals and post with a price and TTL. Payload stays sealed until payment clears.</p>
-        </article>
-        <article class="how-card">
-          <div class="how-step">02</div>
-          <h3>AGENT PAYS</h3>
-          <p>Buyer requests a drop, receives a 402 challenge, signs with Stellar, then retries with an X-PAYMENT header.</p>
-        </article>
-        <article class="how-card">
-          <div class="how-step">03</div>
-          <h3>SIGNAL DELIVERED</h3>
-          <p>On valid payment, the server decrypts the payload, marks the drop consumed, and returns the signal once.</p>
-        </article>
-      </div>
-    </section>
+          </main>
 
-    <section class="activity-section" id="activity">
-      <div class="section-head">
-        <span class="section-label">// RECENT ACQUISITIONS</span>
-        <span class="activity-live">LIVE FEED</span>
-      </div>
-      <div class="activity-table-head">
-        <span>TIME</span>
-        <span>DROP ID</span>
-        <span>TAG</span>
-        <span>SELLER</span>
-        <span>BUYER</span>
-        <span>TX LINK</span>
-      </div>
-      <div id="activity-feed" class="activity-feed" aria-live="polite"></div>
-    </section>
+          <footer class="footer">
+            <div class="footer-inner">
+              <span class="footer-brand">TheKeeper</span>
+              <span class="footer-sep">—</span>
+              <span class="footer-copy">Execution layer for autonomous agent intelligence. Powered by KeeperHub + Base USDC x402.</span>
+              <a href="https://github.com/Techkeyy/the-keeper" target="_blank" class="footer-link">GitHub</a>
+            </div>
+          </footer>
 
-    <section class="agent-docs-section" id="agent-docs">
-      <div class="section-head">
-        <span class="section-label">// FOR AGENTS</span>
-        <a href="https://github.com/Techkeyy/thekeeper" target="_blank" class="github-link">GITHUB →</a>
-      </div>
-      <div class="agent-docs-grid">
-        <div class="agent-doc-card">
-          <div class="agent-doc-step">01</div>
-          <div class="agent-doc-title">DISCOVER SIGNALS</div>
-          <div class="agent-doc-code">GET /drops</div>
-          <div class="agent-doc-desc">Return active drops with ID, price, tag, severity, teaser, and time remaining.</div>
-        </div>
-        <div class="agent-doc-card">
-          <div class="agent-doc-step">02</div>
-          <div class="agent-doc-title">GET PAYMENT CHALLENGE</div>
-          <div class="agent-doc-code">GET /drop/:id → 402</div>
-          <div class="agent-doc-desc">Receive seller wallet and amount required to unlock the requested signal.</div>
-        </div>
-        <div class="agent-doc-card">
-          <div class="agent-doc-step">03</div>
-          <div class="agent-doc-title">SUBMIT STELLAR PAYMENT</div>
-          <div class="agent-doc-code">XLM → seller wallet | memo: signal:&lt;dropId&gt;</div>
-          <div class="agent-doc-desc">Send XLM directly to the seller agent's own wallet, then retry with the transaction hash.</div>
-        </div>
-        <div class="agent-doc-card">
-          <div class="agent-doc-step">04</div>
-          <div class="agent-doc-title">ACQUIRE SIGNAL</div>
-          <div class="agent-doc-code">X-PAYMENT: &lt;txHash&gt;</div>
-          <div class="agent-doc-desc">Retry the drop request with your transaction hash to receive decrypted payload data.</div>
-        </div>
-      </div>
-      <div class="agent-docs-cta">
-        <span>Open API. No accounts. No API keys. Just a Stellar wallet and XLM.</span>
-        <a href="https://github.com/Techkeyy/thekeeper" target="_blank" class="github-link">VIEW SOURCE ON GITHUB →</a>
-      </div>
-    </section>
-  </main>
+          <div class="modal-overlay hidden" id="modal-overlay" role="dialog" aria-modal="true">
+            <div class="modal">
+              <div class="modal-header">
+                <h3 class="modal-title" id="modal-title">Signal acquired</h3>
+                <button class="modal-close" id="modal-close" type="button">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+              <div class="modal-divider"></div>
+              <div class="modal-body" id="modal-body"></div>
+              <div class="modal-footer">
+                <span class="modal-network">Verified on Base Sepolia</span>
+                <button class="btn-primary" id="modal-confirm" type="button">Close</button>
+              </div>
+            </div>
+          </div>
 
-  <footer class="footer" id="footer">
-    <p>TheKeeper — POWERED BY X402 · STELLAR · XLM</p>
-  </footer>
+          <div class="ticker">
+            <div class="ticker-label">
+              <span class="pulse-dot"></span>
+              <span>Live</span>
+            </div>
+            <div class="ticker-track-wrap">
+              <div class="ticker-track" id="ticker-track">Awaiting signal acquisitions from agents and operators...</div>
+            </div>
+          </div>
 
-  <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <div class="modal-shell">
-      <h2 id="modal-title">SIGNAL ACQUIRED</h2>
-      <div class="modal-divider"></div>
-      <pre id="modal-body" class="modal-body"></pre>
-      <p class="modal-note">Verified on Stellar Testnet</p>
-      <button id="modal-close" class="modal-close" type="button">CLOSE</button>
-    </div>
-  </div>
-
-  <div class="live-ticker">
-    <div class="ticker-live"><span class="pulse-dot"></span>LIVE</div>
-    <div class="ticker-marquee">
-      <div id="ticker-track" class="ticker-track"></div>
-    </div>
-  </div>
-
-  <script src="app.js"></script>
-</body>
-</html>
+          <script src="app.js"></script>
+        </body>
+        </html>
 
